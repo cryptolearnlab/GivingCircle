@@ -90,31 +90,29 @@ mapping (uint => uint) proposalincircle; // proposal number > circle number, one
 
     // gift events
 
-        // implemented in _allocateGifts
+event GiftsAllocated(uint indexed circleNumb, address[] indexed giftrecipients, uint[] indexed giftamounts);  // emitted in _allocateGifts
 
-event GiftsAllocated(uint indexed circleNumb, address[] indexed giftrecipients, uint[] indexed giftamounts);
-
-event GiftRedeemed(uint indexed giftwithdrawn, address indexed withdrawee);
+event GiftRedeemed(uint indexed giftwithdrawn, address indexed withdrawee);  // emitted in redeemGift
 
     // bean events
 
-event BeansDisbursed(uint indexed circleNumb, address[] indexed circleattendees, uint indexed beansdisbursedforcircle);
+event BeansDisbursed(uint indexed circleNumb, address[] indexed circleattendees, uint indexed beansdisbursedforcircle); // emitted in disburseBeans
 
-event BeansPlaced(uint indexed propNumb, uint indexed beansplaced, address indexed beanplacer);
+event BeansPlaced(uint indexed propNumb, uint indexed beansplaced, address indexed beanplacer); // emitted in placeBeans
 
-event BeansRemoved(address[] indexed beanhorders, uint[] indexed beanquantities);
+event BeansRemoved(address indexed beanhorder, uint indexed beansremoved); // emitted in removeBeans
 
     // circle events
 
-event CircleCreated(uint indexed circleNumb);
+event CircleCreated(uint indexed circleNumb); // emitted in newCircle
 
-event ProposalWindowClosed(uint indexed circleNumb, uint[] indexed finalproplist);
+event ProposalWindowClosed(uint indexed circleNumb, uint[] indexed finalproplist); // emitted in closePropWindow
 
-event VotingClosed(uint indexed circleNumb);
+event VotingClosed(uint indexed circleNumb); // emitted in closeCircleVoting
 
     // proposal events
 
-event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address indexed giftrecipient);
+event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address indexed giftrecipient); // emitted by proposeGift
 
 // CONSTRUCTOR 
 
@@ -221,6 +219,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
         g.votingOpen = false; // prevent voting while proposal submission window is open.
         g.beansDisbursed = false;
         g.circleLeader = circleleader; // record circle leader at the time of the circle. 
+        emit CircleCreated(_circlenumber);
         return (true); // need an else false statement?
 
     }
@@ -230,6 +229,8 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
     // false:true established for propWindowOoen:votingOpen upon Giving Circle creation (redemption conditions not met)
 
     function closePropWindow(uint closeCircleNumber) public returns (bool) {
+        uint[] memory finalproposals = proposalsInCircle[closeCircleNumber];
+
         require(
            circleleader == msg.sender, "only circle leader can start a new circle"
         );
@@ -237,6 +238,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
            circleNumbers[closeCircleNumber].propWindowOpen == true , "circle has already been closed to proposals"
         );    
         circleNumbers[closeCircleNumber].propWindowOpen = false;
+        emit ProposalWindowClosed(closeCircleNumber, finalproposals);
         return true;
     }
 
@@ -245,8 +247,10 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
     function removeBeanBalances(address beanhorder) public returns (bool) {
         require(
            circleleader == msg.sender, "only circle leader can remove bean balances"
-        );   
+        );  
+        uint deletedbalance = beanBalances[beanhorder];
         delete beanBalances[beanhorder];
+        emit BeansRemoved(beanhorder, deletedbalance);
         return true;
     }
 
@@ -289,6 +293,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
             circleNumbers[disburseforCircleNumber].beansDisbursed = true; // set beansDisbursed to true for disburseforCircleNumber
             _calcUSDCperBean(disburseforCircleNumber); // make sure this is correct
             circleNumbers[disburseforCircleNumber].votingOpen = true; // last step is to open voting
+            emit BeansDisbursed(disburseforCircleNumber,attendees, (10 * disburseTo.length));
             return true;
     }
 
@@ -305,6 +310,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
         );
         circleNumbers[endcirclenumber].votingOpen = false;
         _allocateGifts(endcirclenumber);
+        emit VotingClosed(endcirclenumber);
         return true;
     }
 
@@ -323,6 +329,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
         Proposal storage p = proposalNumbers[propNumber]; // used to push Proposal Struct elements to proposalNumbers mapping below
         p.beansReceived = 0;
         p.giftAddress = giftRecipient;
+        emit ProposalCreated(propNumber, proposeInCircle, giftRecipient);
         return true;   
     }
 
@@ -338,7 +345,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
         require (
             proposalNumbers[proposal].giftAddress == msg.sender, "this is not your gift!"
         );
-        require( //consider a for loop function which iterates over uint[] returned by proposalsInCircle
+        require( 
             proposalWindowOpen(proposedincirclenumber) == false, "selected giving circle is still accepting proposals" // proposalsInCircle returns uint[] of return circle
         );
         require(
@@ -352,6 +359,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
         totalUSDCgifted += redemptionqty / weiMultiplier; // divide by weiMultiplier to give whole number totalUSDCgifted metric
         USDCgiftsReceived[msg.sender] += redemptionqty / weiMultiplier; // updates mapping to track total gifts withdrawn from contract
         USDC.transferFrom(address(this), giftee, redemptionqty); // USDCgiftPending mapping is 10**18, thus so is redemptionqty
+        emit GiftRedeemed(redemptionqty, giftee);
     }
 
 // BEAN HOLDER FUNCTIONS
@@ -374,6 +382,7 @@ event ProposalCreated(uint indexed propNumb, uint indexed circleNumb, address in
         beanBalances[msg.sender] -= beanqty;
         totalBeans -= beanqty;
         proposalNumbers[propnumber].beansReceived += beanqty;
+        emit BeansPlaced(propnumber, beanqty, msg.sender);
         return true;
     }
 
